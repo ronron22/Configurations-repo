@@ -1,0 +1,31 @@
+# {{ ansible_managed }}
+
+<VirtualHost *:80>
+
+	Servername {{ item.value.servername }}
+
+{% if item.value.serveralias is defined %}
+{% for alias in item.value.serveralias %}
+	ServerAlias {{ alias }}
+{% endfor %}
+{% endif %}
+
+	ServerAdmin webmaster@ecritel.net
+	DocumentRoot {{ item.value.documentroot|default('/var/www/'+item.value.servername+'/www')}}
+
+	<Directory {{ item.value.documentroot|default('/var/www/'+item.value.servername)}}/>
+		Options -Indexes FollowSymLinks
+		AllowOverride All
+		Order allow,deny
+		allow from all
+	</Directory>
+
+	ErrorLog {{ item.value.errorlog|default('/var/log/apache2/'+item.value.servername)}}-error.log
+	CustomLog {{ item.value.errorlog|default('/var/log/apache2/'+item.value.servername)}}-access.log
+
+	<IfModule mod_headers.c>
+        	Header set X-vhostID {{ item.value.servername }}
+	</IfModule>
+
+</VirtualHost>
+# vim: syntax=apache ts=4 sw=4 sts=4 sr noet

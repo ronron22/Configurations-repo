@@ -1,0 +1,9 @@
+search ecritel.net
+
+{% if site_name is defined and 'saint-denis' in site_name or 'std' in site_name %}
+nameserver {{ first_nameserver }}
+nameserver {{ second_nameserver }}
+{% else %}
+nameserver {{ second_nameserver }}
+nameserver {{ first_nameserver }}
+{% endif %}

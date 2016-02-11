@@ -1,0 +1,13 @@
+127.0.0.1	localhost
+{{ ansible_eth0.ipv4.address }}	{{ ansible_fqdn }}	{{ ansible_hostname }}
+
+### LAN ###
+{% for k,v in hostvars.iteritems() %}
+{{v['ansible_eth1']['ipv4']['address']}}	{{ k }}.lan
+{% endfor %} 
+### SQL ###
+{% for host in groups['dbservers'] %}
+{{ hostvars[host]['ansible_eth1']['ipv4']['address'] }}	sql.{{ sage_name }}.lan
+{% endfor %}
+
+## NAS ##

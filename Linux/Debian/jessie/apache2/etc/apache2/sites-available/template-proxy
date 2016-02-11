@@ -1,0 +1,24 @@
+<VirtualHost *:80>
+
+	Servername FQDN
+	ServerAdmin webmaster@ecritel.net
+
+	<IfModule mod_proxy.c>
+
+		ProxyVia On
+		ProxyPreserveHost On
+		ProxyPass / http://ipaddress:portnumber/
+		ProxyPassReverse / http://ipaddress:portnumber/
+
+	</IfModule>
+
+	ErrorLog /var/log/apache2/FQDN-error.log
+	CustomLog /var/log/apache2/FQDN-access.log combined
+
+	<IfModule mod_headers.c>
+
+        	Header set X-vhostID FQDN
+
+	</IfModule>
+
+</VirtualHost>

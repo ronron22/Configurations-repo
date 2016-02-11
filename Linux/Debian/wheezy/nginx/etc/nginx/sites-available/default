@@ -1,0 +1,75 @@
+# {{ ansible_managed }}
+
+server {
+	listen   *:80 default_server;
+
+	root /var/www/default;
+	index index.html;
+
+	add_header X-vhostid default ;
+
+	location = /favicon.ico {
+		log_not_found off;
+		access_log off;
+	}
+ 
+	location = /robots.txt {
+		allow all;
+		log_not_found off;
+		access_log off;
+	}
+  
+	# no access to txt and log files
+	location ~* \.(txt|log)$ {
+		deny all;
+	}
+ 
+	# no accès directly to php that are not directly in docroot
+		location ~ \..*/.*\.php$ {
+		return 403;
+	}
+
+	location ~ \.php$ {
+		fastcgi_split_path_info ^(.+\.php)(/.+)$;
+ 
+		include fastcgi_params;
+		fastcgi_param SCRIPT_FILENAME  $request_filename;
+		fastcgi_pass phpfcgi;
+	}
+
+	location / {
+		try_files $uri $uri/ /index.php?$query_string;
+	}
+
+	location ~/\.ht {
+		deny all;
+	}
+
+	location ~ ^/(nginx_)?status$ {
+		stub_status on;
+		access_log   off;
+		allow	127.0.0.1;
+		allow	213.218.130.0/24 ;
+		deny all;
+	}
+
+	location /munin {
+		alias /var/cache/munin/www;
+		index index.html;
+		access_log   off;
+		allow	127.0.0.1;
+		allow	213.218.130.0/24;
+		deny all;
+	}
+
+	location ~ ^/(status-www*|ping)$ {
+		include fastcgi_params;
+		fastcgi_param SCRIPT_FILENAME $fastcgi_script_name;
+		fastcgi_pass phpfcgi;
+		access_log   off;
+		allow	127.0.0.1;
+		allow	213.218.130.0/24 ;
+		deny all;
+	}
+
+}

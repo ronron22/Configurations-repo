@@ -1,0 +1,6 @@
+# {{ ansible_managed }}
+[client]
+user=root
+{% if db_root_passwd is defined %}
+password={{ db_root_passwd }}
+{% endif %}

@@ -1,0 +1,8 @@
+# {{ ansible_managed }}
+
+<IfModule mod_rpaf-2.0.c>
+	## <IfModule mod_rpaf.c> ne charge pas cette conf ##
+	RPAFenable On
+	RPAFsethostname On
+	RPAFproxy_ips 127.0.0.1 {{ rpaf_proxy__ips|default('127.0.0.1') }}
+</IfModule>

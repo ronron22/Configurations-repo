@@ -1,0 +1,144 @@
+#!/usr/bin/env bash
+
+# tomcat 7 et 8 : 
+# <user username="ecritel" password="ecritel" roles="manager-script" />
+
+## script avec pipe !!! ##
+
+shopt -s extglob
+
+# on defini un PATH secure
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+
+# on desactive les alias
+\unalias -a
+
+NAME=tomcat
+TOMCAT_ADDRESS=127.0.0.1
+TOMCAT_PORT=8080
+TOMCAT_USERNAME=ecritel
+TOMCAT_PASSWORD=ecritel
+TOMCAT_APPS_STATUS=running
+#stopped
+TOMCAT_RUNNING_APPS_LIST="manager|hostmanager"
+#TOMCAT_RUNNING_APPS_LIST="manager|"
+##TOMCAT_SESSIONS_APPS_LIST="ure_re4a_v3|toto"
+
+PIPE_PATH="/tmp/jesuisunpipe"
+
+_NAGIOS_STATUS_OK=0
+_NAGIOS_STATUS_WARNING=1
+_NAGIOS_STATUS_CRITICAL=2
+_NAGIOS_STATUS_UNKNOWN=3
+
+for MYPROG in curl awk ; do
+        if ! type -ap $MYPROG 1> /dev/null ; then
+                OUT="UNKNOWN : impossible de trouver $MYPROG" ;
+		RCODE=3 ;
+        fi
+done
+
+:<<EOF
+# on verifie les arguments (identifiant et MdP)
+#parse_args() {
+#	if (($#!=2)) ; then 
+		echo "UNKNOWN : merci de specifier un identifiant et un mot de passe" ;
+		exit $_NAGIOS_STATUS_UNKNOWN ;
+	else
+		USERNAME=$1 ;
+		PASSWORD=$2 ;
+	fi	 
+}
+
+# on lance la verification des args 
+parse_args $1 $2 
+EOF
+
+# en fin de script on detruit le pipe
+trap "rm -f $PIPE_PATH" EXIT QUIT TERM
+
+# on cree le pipe s'il n'existe pas
+if [[ ! -p $PIPE_PATH ]]; then
+	if ! mkfifo $PIPE_PATH ; then
+		echo "UNKNOWN : impossible de creer le pipe $PIPE_PATH" ;
+		exit $_NAGIOS_STATUS_UNKNOWN
+	fi	
+fi
+
+## initialisation du code retour pour eviter les scripts OUI-OUI ##
+
+RCODE=3
+
+# on recupere la sortie de curl
+check_tomcat_alive() {
+	if ! curl -s http://$TOMCAT_USERNAME:$TOMCAT_PASSWORD@$TOMCAT_ADDRESS:$TOMCAT_PORT/manager/text/list ; then
+		echo "CRITICAL : impossible de se connecter a $NAME sur l'adresse $TOMCAT_ADDRESS" ;
+		exit $_NAGIOS_STATUS_CRITICAL
+		
+	fi
+}
+
+# on envoi la sortie de la commande dans le pipe
+check_tomcat_alive | awk -F":" '$1~"/.*"{print"application "$1" status "$2" sessions "$3}' > $PIPE_PATH &
+
+# on cree des tableaux et on les parses 
+line=()
+while read line ; do
+
+	application_name=$(echo "$line" | awk '{gsub(/\/|-|:/,"");print$2}')
+	eval $application_name=$application_name
+	for value in ${line[@]} ; do
+		application_name+=("$value") ;
+	done
+	array_list+=("${application_name[0]}")
+	
+	# on s'assure que l'application surveillee est presente sur le serveur 
+	if [[ "${application_name[0]}" =~ $TOMCAT_RUNNING_APPS_LIST ]] ; then	
+		# on s'assure que l'appli a surveiller est "running"
+		if [ ${application_name[4]} == "$TOMCAT_APPS_STATUS" ] ; then
+			array_appli_ok+=("${application_name[0]}")
+			RCODE=0 ;
+		else
+			array_appli_nok+=("${application_name[0]}")
+			RCODE=2 ;
+		fi
+	fi
+
+
+	unset  application_name
+
+done <  $PIPE_PATH
+
+## on vérifie le nombre d'apps a surveiller ##
+	IFS="|"
+	for i in $TOMCAT_RUNNING_APPS_LIST ; do
+		((COUNTER_NBVAR++))
+	done
+	IFS=" "
+
+if ((${#array_appli_ok[@]}!=$COUNTER_NBVAR)) ; then
+	RCODE=4
+fi
+
+#####################################
+#   moteur de traitement d'erreur   #
+#####################################
+
+
+
+if (($RCODE==2)) ; then
+	echo -e "$OUT\nappli en erreur :${array_appli_nok[@]}"  ;
+	exit $_NAGIOS_STATUS_CRITICAL ;
+elif (($RCODE==3)) ; then
+	exit $_NAGIOS_STATUS_UNKNOWN ;
+elif (($RCODE==4)) ; then
+	echo -e "Applications actives : ${array_appli_ok[@]} - Applications attendues : ${TOMCAT_RUNNING_APPS_LIST//|/ }" ;
+	exit $_NAGIOS_STATUS_CRITICAL ;
+elif (($RCODE==0)) ; then
+	echo -e "les applis suivantes sont actives : ${array_appli_ok[@]}" ;
+	exit $_NAGIOS_STATUS_OK ;
+else
+	# catch if no match	
+	echo "UNKNOWN : une erreur a eu lieu durant le traitement, merci d'intervenir" ;
+	exit $_NAGIOS_STATUS_UNKNOWN ;
+fi

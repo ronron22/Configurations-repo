@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+
+# on défini un PATH orthodoxe par sécurité
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# on desactive les alias par sécurité
+\unalias -a
+
+# on glob pour le case
+shopt -s extglob
+
+_NAGIOS_STATUS_OK=0
+_NAGIOS_STATUS_WARNING=1
+_NAGIOS_STATUS_CRITICAL=2
+_NAGIOS_STATUS_UNKNOWN=3
+
+CONF_FILE=/etc/memcached.conf
+NAME="memcache"
+NETCAT_OPTS="-w 1 -t"
+
+## on verifie que les dependances sont presentes ##
+for MYPROG in nc awk grep wc ps ; do
+        if ! type -ap $MYPROG &> /dev/null ; then
+                echo "WARNING : impossible de trouver $MYPROG" ;
+                exit $_NAGIOS_STATUS_UNKNOWN
+
+        fi
+done
+
+HELP_STRING="Utilisation : ce script s'utilise avec ou sans arguments.\n
+ . Exemple d'utilisation : ./SERVICE_MEMCACHED_STATUS "adresse" ET "port" OU ./SERVICE_MEMCACHED_STATUS\n
+ . Information : l'adresse IP et le port specifiés sur la ligne de commande sont pris en compte prioritairement à l'évaluation du fichier de configuration.\n
+\tSi aucun arguments n'est spécifié, l'adresse IP et le port définis dans le fichier /etc/memcached.conf sont évalués.\n
+\tSi aucune valeurs n'est trouvés dans le fichier de configuration, l'adresse et le port sont définis au valeurs suivantes : 0.0.0.0/11211"
+
+case $* in 
++([[:digit:]]).+([[:digit:]]).+([[:digit:]]).+([[:digit:]])+([[:space:]])+([[:digit:]]))
+	INTERFACE_NAME=$1
+	PORT_NUMBER=$2
+;;
+-h|--help)
+	echo -e $HELP_STRING
+	exit $_NAGIOS_STATUS_UNKNOWN
+;;
+*)
+	## on test la presence du fichier de conf ##
+	if ! [ -f $CONF_FILE ] ; then
+		echo "WARNING : impossible de trouver le fichier de conf $CONF_FILE, merci d'intervenir" ;
+		exit $_NAGIOS_STATUS_UNKNOWN
+	else
+		## on defini des variables ##
+		PORT_NUMBER_VALUE=$(awk '/^-p/ {print$NF}' $CONF_FILE)
+		PORT_NUMBER=${PORT_NUMBER_VALUE:-11211}
+		INTERFACE_NAME_VALUE=$(awk '/^-l/ {print$NF}' $CONF_FILE)
+		INTERFACE_NAME=${INTERFACE_NAME_VALUE:-0.0.0.0}
+	fi
+;;
+esac	
+
+KEY_NAME=$(echo "ecritel-key-"$RANDOM)
+KEY_VALUE=$(echo "ecritel-value-"$RANDOM)
+VALUE_LENGHT=$((($(echo $KEY_VALUE | wc -c)-1)))
+
+## on verifie que le processus est actif ##
+if ! ps aux | grep  [m]emcache > /dev/null ; then
+        echo "CRITICAL : processus $NAME non actif, merci d'intervenir"
+        exit $_NAGIOS_STATUS_CRITICAL
+fi
+
+## on insere une paire clef/valeur ##
+if ! echo -e "add $KEY_NAME 5 60 $VALUE_LENGHT\r\n$KEY_VALUE\r" | netcat $NETCAT_OPTS $INTERFACE_NAME $PORT_NUMBER 2>/dev/null | grep -q STORED ; then
+        echo "CRITICAL : impossible d'inserer la clef $KEY_NAME"
+        exit $_NAGIOS_STATUS_CRITICAL
+## on interroge la paire clef/valeur ##
+elif ! echo -e "get $KEY_NAME\r" | netcat $NETCAT_OPTS $INTERFACE_NAME $PORT_NUMBER 2>/dev/null | grep -q $KEY_VALUE ; then
+        echo "CRITICAL : impossible de recuperer la valeur de la clef $KEY_VALUE"
+        exit $_NAGIOS_STATUS_CRITICAL
+## on supprime la paire clef/valeur ##
+elif ! echo -e "delete $KEY_NAME\r" | netcat $NETCAT_OPTS $INTERFACE_NAME $PORT_NUMBER 2> /dev/null | grep -q DELETED ; then
+        echo "CRITICAL : impossible de supprimer la clef $KEY_NAME"
+        exit $_NAGIOS_STATUS_CRITICAL
+else
+        echo "OK : service $NAME fonctionnel - ecriture, lecture et suppression de la clef $KEY_NAME reussies" ;
+        exit $_NAGIOS_STATUS_OK
+
+fi
+
+## Catch If Not Match ##
+echo "WARNING : Une condition anormale a ete rencontree, merci d'investiguer" ;
+exit $_NAGIOS_STATUS_UNKNOWN

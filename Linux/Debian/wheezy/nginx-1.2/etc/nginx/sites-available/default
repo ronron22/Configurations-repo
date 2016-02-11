@@ -1,0 +1,42 @@
+server {
+	listen   127.0.0.1:80 default_server;
+
+	root /var/www/default;
+	index index.html;
+
+	add_header X-vhostid default ;
+
+	location / {
+		try_files $uri $uri/ /index.html;
+	}
+
+	location ~/\.ht {
+		deny all;
+	}
+
+	location ~ ^/(nginx_)?status$ {
+		stub_status on;
+		access_log   off;
+		allow	127.0.0.1;
+		allow	213.218.130.0/24 ;
+		deny all;
+	}
+
+	location /munin {
+		alias /var/cache/munin/www;
+		index index.html;
+		access_log   off;
+		allow	127.0.0.1;
+		allow	213.218.130.0/24;
+		deny all;
+	}
+
+        location ~ ^/(status-fpm|ping)$ {
+                access_log off;
+                allow 127.0.0.1;
+                allow 213.218.130.0/24;
+                deny all;
+                include fastcgi_params;
+                fastcgi_pass 127.0.0.1:9000;
+        }
+}

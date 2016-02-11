@@ -1,0 +1,8 @@
+/var/log/tomcat*/catalina.out /usr/local/tomcat/logs/* {
+  copytruncate
+  weekly
+  rotate 52
+  compress
+  missingok
+  create 640 tomcat adm
+}

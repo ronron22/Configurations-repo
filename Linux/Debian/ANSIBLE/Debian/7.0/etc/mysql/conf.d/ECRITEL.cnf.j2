@@ -1,0 +1,24 @@
+[mysqld]
+
+skip-name-resolve
+key_buffer = {{ mysql_key_buffer }}
+query_cache_size = {{ mysql_query_cache_size }}
+query_cache_limit = {{ mysql_query_cache_limit }}
+read_rnd_buffer_size = {{ mysql_read_rnd_buffer_size }}
+read_buffer_size = {{ mysql_read_buffer_size }}
+join_buffer_size = {{ mysql_join_buffer_size }}
+sort_buffer_size = {{ mysql_sort_buffer_size }}
+table_cache = {{ mysql_table_cache }}
+open_files_limit = {{ mysql_open_files_limit }}
+max_connections = {{ mysql_max_connections }}
+innodb_file_per_table = {{ mysql_innodb_file_per_table }}
+innodb_buffer_pool_size = {{ mysql_innodb_buffer_pool_size }}
+innodb_additional_mem_pool_size = {{ mysql_innodb_additional_mem_pool_size }}
+innodb_log_buffer_size = {{ mysql_innodb_log_buffer_size }}
+###### Attention #########################################################################################
+### Attention besoin de : /etc/init.d/mysql stop;rm /var/lib/mysql/ib_logfile*;/etc/init.d/mysql start ###
+##########################################################################################################
+innodb_log_file_size = {{ mysql_innodb_log_file_size }}
+max_heap_table_size = {{ mysql_max_heap_table_size }}
+tmp_table_size = {{ mysql_tmp_table_size }}
+max_connect_errors = {{ mysql_max_connect_errors }}

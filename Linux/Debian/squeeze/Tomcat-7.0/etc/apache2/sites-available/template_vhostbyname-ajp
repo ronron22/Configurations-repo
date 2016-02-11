@@ -1,0 +1,20 @@
+<VirtualHost *:80>
+	Servername www.FQDN
+	ServerAdmin webmaster@ecritel.net
+
+	<IfModule rewrite.c>
+		RewriteEngine On
+		RewriteRule ^/$            /APPLIPATH/ [R]
+	</IfModule>
+
+	<IfModule proxy.c>
+		<IfModule proxy_ajp.c>
+			ProxyPass         /APPLIPATH  ajp://127.0.0.1:8009/APPLIPATH
+			ProxyPassReverse  /APPLIPATH  ajp://127.0.0.1:8009/APPLIPATH
+		</IfModule>
+	</IfModule>
+
+	ErrorLog /var/log/apache2/www.FQDN-error.log
+	CustomLog /var/log/apache2/www.FQDN-access.log combined
+
+</VirtualHost>

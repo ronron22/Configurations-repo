@@ -1,0 +1,45 @@
+if [ "`id -u`" -eq 0 ]; then
+  PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+else
+  PATH="/usr/local/bin:/usr/bin:/bin"
+fi
+
+if [ "$PS1" ]; then
+  if [ "$BASH" ]; then
+    PS1='\u@\h:\w\$ '
+  else
+    if [ "`id -u`" -eq 0 ]; then
+      PS1='# '
+    else
+      PS1='$ '
+    fi
+  fi
+fi
+
+export PATH
+
+alias ll="ls -alh $LS_OPTIONS"
+alias lt="ls -alrth $LS_OPTIONS"
+alias lT="ls -alrth $LS_OPTIONS"
+alias lS="ls -alrSh $LS_OPTIONS"
+
+alias cpbackup="cp -av --parent"
+alias cpv="cp -av"
+
+HISTTIMEFORMAT="%D %T "
+HISTSIZE=10000
+umask 022
+
+if [ -f /usr/bin/vim.basic ] ; then
+    EDITOR=/usr/bin/vim.basic
+    VISUAL=/usr/bin/vim.basic
+fi
+
+if [ -d /etc/profile.d ]; then
+  for i in /etc/profile.d/*.sh; do
+    if [ -r $i ]; then
+      . $i
+    fi
+  done
+  unset i
+fi

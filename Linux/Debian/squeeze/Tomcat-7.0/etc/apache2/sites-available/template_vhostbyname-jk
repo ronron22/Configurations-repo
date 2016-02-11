@@ -1,0 +1,21 @@
+<VirtualHost *:80>
+	Servername www.FQDN
+	ServerAdmin webmaster@ecritel.net
+	DocumentRoot /var/lib/tomcat/webapps/APPLI
+
+	<Directory /var/lib/tomcat/webapps/APPLI>
+		Options -Indexes FollowSymLinks
+		AllowOverride All
+		Order allow,deny
+		allow from all
+	</Directory>
+
+	<IfModule mod_jk.c>
+		JkMount / default
+		JkMount /APPLI/* default
+	</IfModule>
+
+	ErrorLog /var/log/apache2/www.FQDN-error.log
+	CustomLog /var/log/apache2/www.FQDN-access.log combined
+
+</VirtualHost>

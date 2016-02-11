@@ -1,0 +1,109 @@
+#!/usr/bin/env bash 
+
+## todo ##
+# remplacer le grep ^# par un test interne de bash [[ $i =~ "#" ]] par exemple, plus rapide
+
+### procedure ###
+## cas de sortie 
+# UNKNOWN : impossible de trouver "programme"
+# UNKNOWN : une instance est deja active
+# UNKNOWN : liste des domaines non specifiee dans Nconf
+# UNKNOWN : impossible de charger la liste des domaines
+# CRITICAL : les vhosts suivants sont en erreurs
+# OK : les vhosts suivants repondent bien
+# UNKNOWN : une erreur a eu lieu durant le traitement, merci d'intervenir
+
+# on defini un PATH secure
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+
+# on desactive les alias
+\unalias -a
+
+_NAGIOS_STATUS_OK=0
+_NAGIOS_STATUS_WARNING=1
+_NAGIOS_STATUS_CRITICAL=2
+_NAGIOS_STATUS_UNKNOWN=3
+
+# on verifie la presence des dependances
+for MYPROG in curl awk basename rm hostname date ; do
+        if ! type -ap $MYPROG 1> /dev/null ; then
+                echo "UNKNOWN : impossible de trouver $MYPROG" ;
+                exit $_NAGIOS_STATUS_UNKNOWN ;
+        fi
+done
+
+# on recupere l'ip WAN
+IPADDRESS=$(hostname -i)
+# on recupere le nom du script
+SCRIPT_NAME=$(basename $0)
+# on definie le pid file
+LOCK_FILE=/var/run/$SCRIPT_NAME.pid
+
+# on fait le menache en sortant
+trap "rm -f $LOG_FILE $LOCK_FILE" EXIT QUIT TERM
+
+# on autorise qu'une instance du script
+if [ -f $LOCK_FILE ] ; then
+	echo "UNKNOWN : une instance est deja active" ;
+	exit $_NAGIOS_STATUS_OK ;
+else
+	echo "$$" > $LOCK_FILE ; 
+fi
+
+# on s'assure qu'un argument est donne   
+if (("$#"==0)) ; then
+	echo "UNKNOWN : liste des domaines non specifiee dans Nconf" ;
+	exit $_NAGIOS_STATUS_UNKNOWN ;
+else
+	DOMAINS_LIST_FILE="$1"
+	if ! [ -f $DOMAINS_LIST_FILE ] ; then
+		echo "UNKNOWN : impossible de charger la liste des domaines $DOMAINS_LIST_FILE" ;
+		exit $_NAGIOS_STATUS_UNKNOWN ;
+	fi
+fi
+
+# on initialise le tableau associatif
+declare -A ARRAY
+
+# on initialise le code retour pour qu'il ne soit jamais vide
+RCODE=0
+
+# initialisation du compteur
+START_TIME=$(date +%s)
+
+while read line ; do :
+	if ! echo $line | grep -qE "^#" ; then 
+		ARRAY["$line"]=$(curl -s -L --connect-timeout 1 --keepalive-time 10 -I --header "Host: $line" http://$IPADDRESS | awk -F":" '/X-vhostID:/{print$2}')
+		if [[ ${ARRAY["$line"]} =~ "default" ]] ; then
+			VHOST_NOK_ARRAY+=("$line")
+			RCODE=2 ;
+		else
+			VHOST_OK_ARRAY+=(" $line")
+		fi	
+	fi
+done < $DOMAINS_LIST_FILE
+
+# arret du compteur
+END_TIME=$(date +%s)
+# calcul du delai
+TOTAL_TIME=$((($END_TIME-$START_TIME)))
+
+echo "$(date "+%D %Hh%M") : $TOTAL_TIME" >> /tmp/stats
+
+#####################################
+#   moteur de traitement d'erreur   #
+#####################################
+
+if (($RCODE==2)) ; then
+        echo -e "CRITICAL :${TOTAL_TIME}s: les vhosts suivants sont en erreurs : ${VHOST_NOK_ARRAY[@]}" ;  
+        exit $_NAGIOS_STATUS_CRITICAL ;
+elif (($RCODE==3)) ; then
+        exit $_NAGIOS_STATUS_UNKNOWN ;
+elif (($RCODE==0)) ; then
+        echo -e "OK :${TOTAL_TIME}s: les vhosts suivants repondent bien : ${VHOST_OK_ARRAY[@]}" ; 
+        exit $_NAGIOS_STATUS_OK ;
+else
+        # catch if no match     
+        echo "UNKNOWN : une erreur a eu lieu durant le traitement, merci d'intervenir" ;
+        exit $_NAGIOS_STATUS_UNKNOWN ;
+fi

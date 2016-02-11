@@ -1,0 +1,46 @@
+# {{ ansible_managed }}
+
+<IfModule mod_ssl.c>
+	<VirtualHost *:443>
+	    Servername {{ item.value.servername }}
+
+{% if item.value.serveralias is defined %}
+{% for alias in item.value.serveralias %}
+        ServerAlias {{ alias }}
+{% endfor %}
+{% endif %}
+
+		ServerAdmin webmaster@ecritel.net
+
+	    DocumentRoot {{ item.value.documentroot|default('/var/www/'+item.value.servername+'/www')}}
+
+		SSLEngine on
+        # debut - extrait du wiki #
+        SSLProtocol All -SSLv3 -SSLv2
+        SSLCipherSuite EECDH+ECDSA+AESGCM:EECDH+aRSA+AESGCM:EECDH+ECDSA+SHA384:EECDH+ECDSA+SHA256:EECDH+aRSA+SHA384:EECDH+aRSA+SHA256:EECDH+aRSA+RC4:EECDH:ECDHE-RSA-AES128-SHA256:AES128-GCM-SHA256:3DES+EDE+CBC+SHA+aRSA:!RC4:HIGH:!MD5:!aNULL:!eNULL:!LOW:!EDH:!EXP:!PSK:!SRP:!DSS;
+        SSLHonorCipherOrder On
+        Header add Strict-Transport-Security: "max-age=15768000"
+        # fin #
+
+		SSLCertificateFile /etc/apache2/ssl/ANNEE/{{ item }}.crt
+		SSLCertificateKeyFile /etc/apache2/ssl/ANNEE/{{ item }}.key
+		SSLCACertificateFile /etc/apache2/ssl/ANNEE/{{ item
+}}.crt 
+
+	    <Directory {{ item.value.documentroot|default('/var/www/'+item.value.servername)}}/>
+			Options -Indexes FollowSymLinks 
+			AllowOverride None
+			Order allow,deny
+			allow from all
+		</Directory>
+
+	    ErrorLog {{ item.value.errorlog|default('/var/log/apache2/'+item.value.servername)}}-error.log
+	    CustomLog {{ item.value.errorlog|default('/var/log/apache2/'+item.value.servername)}}-access.log
+
+		<IfModule mod_headers.c>
+        	Header set X-vhostID {{ item.value.servername }}
+		</IfModule>
+
+	</VirtualHost>
+</IfModule>
+# vim: syntax=apache ts=4 sw=4 sts=4 sr noet

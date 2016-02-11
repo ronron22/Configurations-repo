@@ -1,0 +1,161 @@
+#!/usr/bin/env bash
+
+# on glob pour le case (ou pas)
+# shopt -s extglob
+
+# on defini un PATH sur
+PATH=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/varnish-new/bin:/usr/local/varnish-new/sbin
+
+# on degage d'eventuels alias
+\unalias -a
+
+VARNISHD_NAME="varnishd"
+VARNISHNSCA_NAME="varnishncsa"
+SCRIPT_NAME=$(basename $0)
+LOCK_FILE=/var/run/$SCRIPT_NAME.pid
+LOG_FILE=/tmp/$SCRIPT_NAME.log
+
+_NAGIOS_STATUS_OK=0
+_NAGIOS_STATUS_WARNING=1
+_NAGIOS_STATUS_CRITICAL=2
+_NAGIOS_STATUS_UNKNOWN=3
+
+for MYPROG in varnishstat awk varnishadm rm pgrep id ; do
+        if ! type -ap $MYPROG &> /dev/null ; then
+                echo "WARNING : impossible de trouver $MYPROG, une dependance requise manque !!!" ;
+                exit $_NAGIOS_STATUS_UNKNOWN
+
+        fi
+done
+
+# on fait le menache en sortant, chi, chi
+trap "rm -f $LOCK_FILE" EXIT QUIT TERM
+
+## on verifie l'identite de l'executant ##
+if (($(id -u)>0)) ; then 
+		echo "UNKNOWN : ce script devrait s'executer sous l'utilisateur root" ;
+		exit $_NAGIOS_STATUS_UNKNOWN ;
+fi
+
+## on verifie que c'est bien bash 4 au moins ##
+if (($BASH_VERSINFO<4)) ; then 
+	echo "UNKNOWN : ce script necessite au moins Bash 4" ;
+	exit $_NAGIOS_STATUS_UNKNOWN ;
+fi	
+
+# on autorise qu'une instance du script
+if [ -f $LOCK_FILE ] ; then
+	echo "UNKNOWN : une instance est deja active" ;
+	exit $_NAGIOS_STATUS_UNKNOWN ;
+else
+	echo "$$" > $LOCK_FILE ;
+fi
+
+HELP_STRING="Utilisation : ce script s'utilise avec les arguments suivants : --without-varnishncsa ou --with-varnishncsa\n
+ . Exemple d'utilisation : ./$SCRIPT_NAME pour vérifier si $VARNISHD_NAME et $VARNISHNSCA_NAME sont actif.\n
+ . Exemple d'utilisation : ./$SCRIPT_NAME --without-varnishncsa pour ne PAS vérifier si $VARNISHNSCA_NAME est actif.\n"
+
+## on initialise le code retour a 3 on evite ainsi les scripts OUI-OUI
+RCODE=3
+
+## on passe les compteurs en MAJUSCULE ##
+declare -u VARNISH_COUNTERS="client_conn client_drop cache_hit cache_miss backend_fail"
+
+# initialisation du log 
+if [ -f $LOG_FILE ] ; then
+	> $LOG_FILE
+else
+	if ! > $LOG_FILE ; then
+		echo "UNKNOWN : impossible de creer le fichier de log" ;
+		exit $_NAGIOS_STATUS_UNKNOWN ;
+	fi
+fi
+
+check_varnishd_status() {
+	if ! varnishadm ping &> $LOG_FILE ; then
+		RCODE=2 ;
+        	OUT="CRITICAL : le processus $VARNISHD_NAME ne repond pas, merci de consulter le journal des erreurs $LOG_FILE" ;
+	elif ! varnishadm status &> $LOG_FILE ; then
+		RCODE=2 ;
+        	OUT="CRITICAL : impossible d'obtenir le status du processus $VARNISHD_NAME, merci de consulter le journal des erreurs $LOG_FILE" ;
+	else
+		RCODE=0 ;
+	fi
+}
+
+check_varnishncsa_status() {
+	## a modifier NCSA_LOG_ENABLE=1
+	## pareil ##
+	if ((${NCSA_LOG_ENABLE:-1}==1)) ; then 
+		if ! pgrep $VARNISHNSCA_NAME 1> /dev/null 2> $LOG_FILE ; then
+			RCODE=2 ;
+        		OUT="CRITICAL : impossible de trouver le processus $VARNISHNSCA_NAME, merci d'intervenir" ;
+		else
+			VALUES+=("$VARNISHNSCA_NAME est actif -") ;
+		fi
+	fi
+}
+
+
+parse_varnish_counters() {
+	# compteurs extraits ## 
+	# client_conn                    
+	# client_drop 
+	# cache_hit
+	# cache_miss
+	# backend_fail
+
+	if (($RCODE==0)) ; then
+		for COUNTER in $VARNISH_COUNTERS ; do
+			## la variable COUNTER_NAME prend le nom de COUNTER ##
+			eval COUNTER_NAME=$COUNTER
+			## on export la variable en la passant en majuscule et en lui donnant une valeur ##  
+			export $COUNTER_NAME=$(varnishstat -1 -f ${COUNTER,,} | awk '{print$2}')
+			## on utilise l'indirection pour obtenir la valeur de la variable et on l'ajoute au tableau ##
+			VALUES+=("${COUNTER_NAME}:${!COUNTER_NAME:-0} ")
+		done 
+		## "le tableau est la sortie" ##
+		OUT="${VALUES[@]}"
+	fi
+}
+
+## fonction de ratio a terminer ##
+#echo $(((${CACHE_HIT:-0}+${CACHE_MISS:-0})))
+
+errors_engine() {
+	#################################
+	# moteur de traitement d'erreur #
+	#################################
+	if (($RCODE==2)) ; then
+		echo -e "$OUT"
+		exit $_NAGIOS_STATUS_CRITICAL ;
+	elif (($RCODE==3)) ; then
+		echo -e "$OUT"
+		exit $_NAGIOS_STATUS_UNKNOWN ;
+	elif (($RCODE==0)) ; then
+		echo -e "OK : $OUT"
+		exit $_NAGIOS_STATUS_OK ;
+	else
+		# catch if no match     
+		echo "UNKNOWN : une erreur a eu lieu durant le traitement, merci d'intervenir" ;
+		exit $_NAGIOS_STATUS_UNKNOWN ;
+	fi
+}
+
+case $* in
+	-h|--help)
+		echo -e $HELP_STRING
+		exit $_NAGIOS_STATUS_UNKNOWN
+	;;
+	--without-varnishncsa)
+		check_varnishd_status	
+		parse_varnish_counters
+		errors_engine
+	;;
+	*)
+		check_varnishd_status	
+		check_varnishncsa_status
+		parse_varnish_counters
+		errors_engine
+	;;
+esac

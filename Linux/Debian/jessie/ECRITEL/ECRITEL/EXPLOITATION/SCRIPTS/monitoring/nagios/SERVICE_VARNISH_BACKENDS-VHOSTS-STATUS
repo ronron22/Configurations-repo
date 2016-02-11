@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+
+shopt -s extglob
+
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+\unalias -a
+
+_NAGIOS_STATUS_OK=0
+_NAGIOS_STATUS_WARNING=1
+_NAGIOS_STATUS_CRITICAL=2
+_NAGIOS_STATUS_UNKNOWN=3
+
+DOMAINS="www.aramisauto.com crm.aramisauto.com stock.aramisauto.com aramisauto.de v5.aramisauto.com actweb.aramisauto.com cohiba.aramisauto.com reprise-illico.com aramis-occasions.com robusto.aramisauto.com privassets.aramisauto.com"
+
+
+for MYPROG in curl mktemp grep awk tr rm ; do
+        if ! type -ap $MYPROG 1> /dev/null ; then
+                echo "WARNING : impossible de trouver $MYPROG" ;
+                exit $_NAGIOS_STATUS_UNKNOWN
+        fi
+done
+
+MY_TEMP_FILE=$(mktemp)
+
+clean_funct() {
+	if ! rm $MY_TEMP_FILE > /dev/null ; then
+        	echo "WARNING : impossible de supprimer le fichier tmp $MY_TEMP_FILE, merci d'intervenir" ;
+		clean_funct
+        	exit $_NAGIOS_STATUS_UNKNOWN
+	fi
+}
+
+if ! varnishadm vcl.show $(varnishadm vcl.list |  awk '/active/ {print$NF}')| grep -q X-Ecritel-Check ; then
+	echo "WARNING : impossible de trouver X-Ecritel-Check dans la configuration Varnish" ;
+	clean_funct
+	exit $_NAGIOS_STATUS_UNKNOWN
+fi
+
+
+for DOMAIN in $DOMAINS ; do
+	curl -I --header "Host: $DOMAIN" --header "X-Ecritel-Check: True" http://localhost/ >$MY_TEMP_FILE 2>/dev/null
+	if grep -q 403 $MY_TEMP_FILE ; then 
+		DOMAINS_DENY_ARRAY+="$DOMAIN "
+	else
+		SEARCH_PATTERN=$(grep X-vhostID $MY_TEMP_FILE | awk '{print$NF}' | tr -d "\r") 
+			if [[ "$DOMAIN" == "www.aramisauto.com" ]] ; then
+				if echo "$SEARCH_PATTERN" | grep -q v5 ; then	
+					DOMAINS_OK_ARRAY+="$DOMAIN "
+				fi
+			elif [[ "$DOMAIN" == "aramis-occasions.com" ]] ; then
+				if echo "$SEARCH_PATTERN" | grep -q vo ; then	
+					DOMAINS_OK_ARRAY+="$DOMAIN "
+				fi
+			else
+				if echo "$DOMAIN" | grep -q "$SEARCH_PATTERN" ; then
+					DOMAINS_OK_ARRAY+="$DOMAIN "
+				else
+					DOMAINS_NOK_ARRAY+="$DOMAIN "
+				fi
+			fi
+	fi	
+done
+
+if ! [ -z "$DOMAINS_NOK_ARRAY" ] ; then
+	echo "CRITICAL : les domaine(s) suivants sont NOK : ${DOMAINS_NOK_ARRAY[@]}"  
+	clean_funct	
+	exit $_NAGIOS_STATUS_CRITICAL
+elif ! [ -z "$DOMAINS_DENY_ARRAY" ] ; then
+	echo "WARNING : les domaine(s) suivant sont interdits : ${DOMAINS_DENY_ARRAY[@]}" 
+	clean_funct
+	exit $_NAGIOS_STATUS_WARNING
+else
+	echo "OK : les domaine(s) suivant sont accessibles : ${DOMAINS_OK_ARRAY[@]}"  
+	clean_funct
+	exit $_NAGIOS_STATUS_OK
+fi
+
+
+# catch if no match	
+clean_funct
+exit $_NAGIOS_STATUS_UNKNOWN

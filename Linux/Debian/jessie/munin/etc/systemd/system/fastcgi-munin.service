@@ -1,0 +1,16 @@
+[Unit]
+Description=FastCGI spawner for Munin cgi
+
+[Service]
+User=munin
+Group=www-data
+StandardError=syslog
+Type=forking
+Restart=on-abort
+SyslogIdentifier=fastcgi-munin
+ExecStartPre=/bin/rm -f /var/run/fastcgi-munin.pid
+ExecStartPre=/bin/rm -f /var/run/munin/fcgi-munin-graph.sock
+ExecStart=/usr/bin/spawn-fcgi -s /var/run/munin/fcgi-munin-graph.sock -U www-data -u munin -g munin /usr/lib/munin/cgi/munin-cgi-graph -M 0770
+
+[Install]
+WantedBy=multi-user.target

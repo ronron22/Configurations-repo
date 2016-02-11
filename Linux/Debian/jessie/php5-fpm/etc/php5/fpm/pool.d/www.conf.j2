@@ -1,0 +1,40 @@
+; {{ ansible_managed }}
+[www{{ item }}]
+
+user = www-data
+group = www-data
+
+#listen = {{ listen|default('127.0.0.1:9000') }}
+listen = 127.0.0.1:900{{ item }}
+
+
+listen.backlog = -1
+
+; 'ondemand' ou 'dynamic'
+pm = {{ pm|default('dynamic') }}
+; passer de 64 a 500 pour eviter "got a max_children reached"
+pm.max_children = {{ pm_max_children|default('500') }}
+pm.start_servers = {{ pm_start_servers|default('5') }}
+pm.min_spare_servers = {{ pm_min_spare_servers|default('5') }}
+pm.max_spare_servers = {{ pm_max_spare_servers|default('30') }}
+pm.max_requests = {{ pm_max_requests|default('400') }}
+pm.status_path = /status-$pool
+ 
+ping.path = /ping-$pool
+ping.response = pong-$pool
+
+request_terminate_timeout = 2h
+request_slowlog_timeout = 15s
+ 
+rlimit_files = 131072
+rlimit_core = unlimited
+ 
+chdir = /
+ 
+catch_workers_output = yes
+
+slowlog = /var/log/nginx/slow-$pool.log
+access.log = /var/log/nginx/fpm-$pool-access.log
+php_admin_value[error_log] = /var/log/nginx/fpm-php.$pool.log
+php_admin_flag[log_errors] = {{ log_errors|default('on') }}
+access.format = "%R  %t \"%m %r%Q%q\" %s %f %{mili}dms %{megabytes}MMo %{kilo}Mkb %C%%"

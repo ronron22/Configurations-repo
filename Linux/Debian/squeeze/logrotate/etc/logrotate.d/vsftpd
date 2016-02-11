@@ -1,0 +1,9 @@
+/var/log/vsftpd/vsftpd.log
+{
+        create 640 root adm
+        missingok
+        notifempty
+        rotate 52
+        weekly
+        compress
+}

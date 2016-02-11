@@ -1,0 +1,25 @@
+<IfModule mod_ssl.c>
+	<VirtualHost IP_SERVER:443>
+		Servername FQDN
+		ServerAdmin webmaster@ecritel.net
+		DocumentRoot /var/www/FQDN/www
+			
+		SSLEngine on
+		SSLCertificateFile /etc/apache2/ssl/ANNEE/FQDN.crt
+		SSLCertificateKeyFile /etc/apache2/ssl/ANNEE/FQDN.key
+		SSLCACertificateFile /etc/apache2/ssl/ANNEE/FQDN.crt
+
+		<Directory /var/www/FQDN/>
+			Options -Indexes FollowSymLinks 
+			AllowOverride None
+			Order allow,deny
+			allow from all
+		</Directory>
+
+		ErrorLog /var/log/apache2/FQDN-error.log
+		CustomLog /var/log/apache2/FQDN-access.log combined
+	</VirtualHost>
+		<IfModule mod_headers.c>
+        		Header set X-vhostID vhost_servername
+		</IfModule>
+</IfModule>

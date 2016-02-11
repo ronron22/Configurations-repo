@@ -1,0 +1,109 @@
+{% if 'mag' in role_name %}
+# {{ ansible_managed }}
+# mixed Ecritel Install && Exploit && Stocko
+
+server {
+
+{% if is_varnish_server is defined %}
+        listen   127.0.0.1:80 ;
+{% else %}
+        listen   *:80 ;
+{% endif %}
+	
+	root /var/www/{{ item }}/www;
+	index index.php index.html;
+	fastcgi_index   index.php;
+
+	server_name {{ item }}; 
+	add_header X-vhostid {{ item }};
+
+	access_log /var/log/nginx/{{ item }}-access.log;	
+	error_log /var/log/nginx/{{ item }}-error.log;	
+
+
+    # if phpmyadmin
+    # ln -s /usr/share/phpmyadmin /var/www/www.nomdedomaine/www/
+    location ~ ^/sQLaDmin/(.+\.php)$ {
+        fastcgi_index   index.php;
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME  $request_filename;
+        fastcgi_pass phpfcgi;
+        allow   127.0.0.1;
+        allow   213.218.130.0/24;
+        deny all; 
+    }
+
+	location / {
+
+        # Allow a static html file to be shown first
+		index index.html index.php;
+
+        # If missing pass the URI to Magento's front handler
+		try_files $uri $uri/ @handler;
+        
+        # Assume all files are cachable
+		expires 30d; ## Assume all files are cachable
+	}
+
+    # accès a l'API Rest
+    location /api {
+        rewrite ^/api/rest /api.php?type=rest last;
+        rewrite ^/api/v2_soap /api.php?type=v2_soap last;
+        rewrite ^/api/soap /api.php?type=soap last;
+    }
+
+	# These locations would be hidden by .htaccess normally
+	location ^~ /app/                { deny all; }
+	location ^~ /includes/           { deny all; }
+	location ^~ /lib/                { deny all; }
+	location ^~ /media/downloadable/ { deny all; }
+	location ^~ /pkginfo/            { deny all; }
+	location ^~ /report/config.xml   { deny all; }
+	location ^~ /var/                { deny all; }
+
+    # Disable .htaccess and other hidden files
+	location  /. {
+		return 404;
+	}
+
+    # Magento uses a common front handler
+	location @handler { 
+		rewrite / /index.php;
+	}
+ 
+    # Forward paths like /js/index.php/x.js to relevant handler
+	location ~ .php/ { 
+		rewrite ^(.*.php)/ $1 last;
+	}
+
+    # Execute PHP scripts
+	location ~ .php$ { 
+        # Catch 404s that try_files miss
+		if (!-e $request_filename) { rewrite / /index.php last; }
+
+		include        fastcgi_params; ## See /etc/nginx/fastcgi_params 
+        # Do not cache dynamic content
+		expires        off; 
+		fastcgi_pass phpfcgi;
+
+        # # Store code is defined in administration > Configuration > Manage Stores
+		if ($php_mage_run_type = "") {
+			set $php_mage_run_code fr;
+			set $php_mage_run_type store;
+		}
+
+		fastcgi_param  SCRIPT_FILENAME  $document_root$fastcgi_script_name;
+		fastcgi_buffer_size 16k;
+		fastcgi_buffers 4 16k;
+	}
+
+     # deal with assets problem
+	 rewrite ^/minify/([0-9]+)(/.*.(js|css))$ /lib/minify/m.php?f=$2&d=$1 last;
+        rewrite ^/skin/m/([0-9]+)(/.*.(js|css))$ /lib/minify/m.php?f=$2&d=$1 last;
+
+	 location /lib/minify/ {
+	        allow all;
+	    }
+
+}
+{% endif %}

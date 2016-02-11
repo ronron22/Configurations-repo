@@ -1,0 +1,167 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+"""
+version 1.0
+
+Dépendances
+-----------
+1) pip install requests solrpy
+2) un core ecritel avec le schéma suivant :
+  <field name="id"      type="string"    indexed="true"  stored="true"  multiValued="false" /> 
+  <field name="name"      type="string"    indexed="true"  stored="true"  multiValued="true" /> 
+  <field name="valeur"      type="string"    indexed="true"  stored="true"  multiValued="true" /> 
+  <field name="_version_" type="long"      indexed="true"  stored="true"/>
+---
+NAGIOS_STATUS_OK=0
+NAGIOS_STATUS_WARNING=1
+NAGIOS_STATUS_CRITICAL=2
+NAGIOS_STATUS_UNKNOWN=3
+fait :
+ - gestion des exceptions (sauf celle de solrpy qui est chelou) implémenté et testée
+ - traitements et print en fonction du role     
+Pour debugger une fonction : import pdb; pdb.set_trace()
+A venir:
+    argparse pour traiter des options en ligne de commande
+"""
+
+import requests
+import solr 
+import sys
+import time
+
+role = 'master'
+master_server = 'localhost'
+slave_server = 'mdp11'
+my_servers = [master_server, slave_server]
+my_core_name= 'ecritel'
+my_status_uri = '/admin/cores?action=STATUS&core='
+my_time = int(time.time())
+
+class SolrReplicationCheck:
+
+    """
+    cette classe a quatres méthodes :
+        - get_status
+        - search_key
+        - write_key
+        - delete_key
+    """
+
+    def get_status(self, server, uri, core) :
+
+        self.server_name = server+':8983/solr'
+        self.uri_name = uri
+        self.core_name = core
+
+        try :
+            my_solr_curs = requests.get('http://'+self.server_name+self.uri_name+self.core_name+'&wt=json')
+        except requests.exceptions.ConnectionError :
+            print('Unable to connect on '+self.server_name)  
+            sys.exit(2)
+        except :
+            print('Unable to get status '+self.server_name)  
+            sys.exit(2)
+        
+        try :
+            my_solr_uptime = my_solr_curs.json()['status']['ecritel']['uptime']
+        except :
+            print('Unable to get uptime status on'+self.server_name+self.uri_name+self.core_name)  
+            sys.exit(2)
+        if my_solr_uptime :
+            if my_solr_uptime > 0 :
+                pass
+                #print('ok, uptime: %i' % my_solr_uptime)
+            else :
+                print('Uptime is %i, there an anomaly' % my_solr_uptime)
+                sys.exit(2)
+        else :
+            print('Unable to get uptime value')  
+            sys.exit(2)
+
+    def search_key(self, server, core, key, my_time) :
+
+        self.server_name = server+':8983/solr'
+        self.core_name = core
+        self.key_name = key
+        self.key_value = my_time
+
+        my_solr_curs = solr.SolrConnection('http://'+self.server_name+'/'+self.core_name)
+        try: 
+            my_solr_id = my_solr_curs.query('id:%i' %self.key_name)
+        except :
+            print ('Unable to obtain keys id: %i from %s/%s' % (self.key_name,self.server_name,self.core_name)) 
+            sys.exit(2)
+        if len(my_solr_id) > 0 :
+            for hit in my_solr_id.results:
+                my_val = hit['valeur']
+                my_val = ''.join(my_val) # on convertie la liste en string
+                my_val = int(my_val)
+                if my_val == self.key_value :
+                    pass
+                    #print("ok %s" % my_val)
+                else:
+                    print('ecritel_key invalide, value : %i - keys differente between %s server and %s server' % (my_val,master_server,slave_server))
+                    sys.exit(2)
+        else:
+            print('There no key with id %i' % self.key_name)
+            sys.exit(3)
+
+    def write_key(self, server, core, key_id, key_name, my_time) :
+
+        self.server_name = server+':8983/solr'
+        self.core_name = core
+        self.key_id = key_id
+        self.key_name = key_name
+        self.key_value = my_time
+
+        my_solr_curs = solr.SolrConnection('http://'+self.server_name+'/'+self.core_name)
+        my_solr_curs.add(id=self.key_id, name=self.key_name, valeur=self.key_value)
+        my_solr_curs.commit()
+        
+    def delete_key(self, server, core, key) :
+
+        self.server_name = server+':8983/solr'
+        self.core_name = core
+        self.key_name = key
+
+        my_solr_curs = solr.SolrConnection('http://'+self.server_name+'/'+self.core_name)
+        try:
+            my_solr_curs.delete(id=self.key_name)
+        except :
+            print ('Unable to delete ecritel_key key with id: %i from %s/%s' % (self.key_name,self.server_name,self.core_name)) 
+            sys.exit(2)
+        my_solr_curs.commit()
+
+
+def main():
+    ##########
+    # Engine #
+    ##########
+
+    # on instancie myobj
+    myobj = SolrReplicationCheck()
+
+    # et on accède aux méthodes
+    for H in my_servers :
+
+        myobj.get_status(H, my_status_uri, my_core_name)
+
+        if 'localhost' in H and 'master' in role :
+            myobj.write_key(H, my_core_name, 2, 'ecritel_key', my_time)
+
+        if 'master' in role :
+            time.sleep(3) # tenir compte du délai de replication
+            myobj.search_key(H, my_core_name, 2, my_time)
+
+    if 'master' in role :
+        # enfin on supprime la clé après la boucle
+        myobj.delete_key(master_server, my_core_name, 2)
+
+    if 'master' in role :
+        print('ok: the solr replication between '+master_server+' and '+slave_server+' is functionnal')   
+    if 'slave' in role :
+        print('ok: the solr status is functionnal')   
+
+if __name__ == '__main__':
+    sys.exit(main())

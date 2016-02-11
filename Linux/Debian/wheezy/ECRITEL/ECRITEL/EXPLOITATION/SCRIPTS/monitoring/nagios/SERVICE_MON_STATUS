@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+
+:<<EOF
+Utilisation : 
+ - Aucun argument n\'est nécessaire
+EOF
+
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+\unalias -a
+
+_NAGIOS_STATUS_OK=0
+_NAGIOS_STATUS_WARNING=1
+_NAGIOS_STATUS_CRITICAL=2
+_NAGIOS_STATUS_UNKNOWN=3
+
+# controle des dependances
+_tr=/usr/bin/tr
+
+for MYPROG in moncmd sed ; do
+        if type -ap $MYPROG 1> /dev/null ; then
+                eval _$(echo $MYPROG | $_tr [a-z] [A-Z])=$MYPROG
+        else
+                echo "WARNING : impossible de trouver $MYPROG" ;
+                exit $_NAGIOS_STATUS_UNKNOWN
+        fi
+done
+
+help_function() {
+	sed -n '4,5'p $0
+}
+
+## moteur ##
+
+case $1 in 
+
+-h|--help) 
+	help_function 
+;;
+
+*)
+	# on verifie que le process repond
+	if ! moncmd list pids &> /dev/null ; then 
+                	echo "CRITICAL : unable to get Mon status, may be Mon don't run !!!" ;
+                	exit $_NAGIOS_STATUS_CRITICAL
+	fi	
+	
+	# on verifie qu'aucune defaillance n'est enregistre
+	mystate="$(moncmd list failures | grep -v "220 list failures completed")" 
+	if [ -n "$mystate" ] ; then 
+		echo "CRITICAL : errors founds in Mon counter's" ;
+		exit $_NAGIOS_STATUS_CRITICAL
+	fi
+
+	# on verifie que le status du service surveille est bon
+	unset mystate
+	mystate="$(moncmd list successes | grep -v "220 list successes completed")"
+	if [ -n "$mystate" ] ; then
+			echo "OK : Mon process is running and the service checked is not in failure state" 
+                	exit $_NAGIOS_STATUS_OK
+	fi	
+exit $_NAGIOS_STATUS_UNKNOWN
+
+;;
+
+esac
+
+# si pas de match on sort en UNKNOWN (surtout pas en OK !!!!)	
+exit $_NAGIOS_STATUS_UNKNOWN

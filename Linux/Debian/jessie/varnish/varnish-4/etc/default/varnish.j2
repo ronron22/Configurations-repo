@@ -1,0 +1,13 @@
+# {{ ansible_managed }}
+
+START=yes
+NFILES=131072
+MEMLOCK=82000
+
+DAEMON_OPTS="-a {{ ansible_eth0.ipv4.address }}:80 \
+             -T localhost:6082 \
+             -f /etc/varnish/default.vcl \
+             -S /etc/varnish/secret \
+             -s malloc,{{ varnish_memory|default('4G') }} \
+             -p send_timeout={{ send_timeout|default('300') }} \
+             -p http_resp_hdr_len={{ http_resp_hdr_len|default('32k') }}"

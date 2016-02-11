@@ -1,0 +1,59 @@
+# {{ ansible_managed }}
+
+server {
+{% if is_varnish_server is defined %}
+        listen   127.0.0.1:80 ;
+{% else %}
+        listen   *:80 ;
+{% endif %}
+
+	root /var/www/{{ item }}/www;
+	index index.php index.html;
+	fastcgi_index   index.php;
+
+	server_name {{ item }}; 
+	add_header X-vhostid {{ item }};
+
+	access_log /var/log/nginx/{{ item }}-access.log;	
+	error_log /var/log/nginx/{{ item }}-error.log;	
+
+    gzip_static on;
+
+    location = /favicon.ico {
+        log_not_found off;
+        access_log off;
+    }
+ 
+    location = /robots.txt {
+        allow all;
+        log_not_found off;
+        access_log off;
+    }
+
+    location / {
+        try_files $uri $uri/ /index.php;
+	}
+
+    # protect .htaccess
+    location ~ (^|/)\. {
+        return 403;
+    }
+
+    # for Magento
+    location ~* /(?:uploads|files)/.*\.php$ {
+        deny all;
+    }
+
+    location ~ \.php$ {
+        fastcgi_split_path_info ^(.+\.php)(/.+)$;
+ 
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME  $request_filename;
+        fastcgi_pass phpfcgi;
+    }
+
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|eot|woff|ttf)$ {
+        expires 1d;
+        log_not_found off;
+    }
+}

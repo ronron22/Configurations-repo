@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+
+:<<EOF
+Pre-requis :
+- base information schema (ne fonctionne pas avec MySQL 4.1.*)
+- un compte privilegie pour interroger cette base
+EOF
+
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+\unalias -a
+
+_NAGIOS_STATUS_OK=0
+_NAGIOS_STATUS_WARNING=1
+_NAGIOS_STATUS_CRITICAL=2
+_NAGIOS_STATUS_UNKNOWN=3
+
+# controle rapide des parametre positionnels
+if (($#<2)) ; then
+	echo "NOK : arguments incorrect" ;
+	exit $_NAGIOS_STATUS_UNKNOWN
+else
+	USERNAME=$1
+	PASSWORD=$2
+fi
+
+MYSQL_COUNTERS_NAMES="max_connect_errors max_error_count"
+
+# controle des dependances
+_tr=/usr/bin/tr
+
+for MYPROG in mysql ; do
+        if type -ap $MYPROG 1> /dev/null ; then
+                eval _$(echo $MYPROG | $_tr [a-z] [A-Z])=$MYPROG
+        else
+                echo "WARNING : impossible de trouver $MYPROG" ;
+                exit $_NAGIOS_STATUS_UNKNOWN
+        fi
+done
+
+# controle pre-requis (droits, base etc ...)
+if $_MYSQL -sNr -u$USERNAME -p$PASSWORD -e "use information_schema;" 2>&1 | grep -q "ERROR 2002" ; then
+	echo "NOK : impossible de se connecter au serveur MySQL, merci d'intervenir" ;
+	exit $_NAGIOS_STATUS_UNKNOWN
+elif $_MYSQL -sNr -u$USERNAME -p$PASSWORD -e "use information_schema;" 2>&1 | grep -q "ERROR 1044" ; then
+	echo "NOK : le compte $USERNAME n'a pas suffisament de droits, merci d'intervenir" ;
+	exit $_NAGIOS_STATUS_UNKNOWN
+elif $_MYSQL -sNr -u$USERNAME -p$PASSWORD -e "use information_schema;" 2>&1 | grep -q "ERROR 1049" ; then
+	echo "NOK : impossible de trouver la DB information_schema, verifiez votre version MySQL" ;
+	exit $_NAGIOS_STATUS_UNKNOWN
+fi
+
+# interrogation des compteurs
+for COUNTER_NAME in $MYSQL_COUNTERS_NAMES ; do
+	MY_ARRAY[${#MY_ARRAY[*]}]=${COUNTER_NAME} ;
+	MY_ARRAY[${#MY_ARRAY[*]}]=$($_MYSQL -sNr -u$USERNAME -p$PASSWORD -e "select variable_value from information_schema.global_variables where variable_name = '$COUNTER_NAME';") ;
+
+done
+
+# definition du seuil (la moitie du total)
+THRESHOLD=$((${MY_ARRAY[1]}/2))
+
+# on verifie que les compteurs ne soient pas vides
+if ((${MY_ARRAY[1]} == 0 )) || ((${MY_ARRAY[3]} == 0 )) ; then
+	echo "NOK : compteur(s) $MY_ARRAY[1]} et/ou $MY_ARRAY[3]} vide(s), merci d'intervenir" ;
+	exit $_NAGIOS_STATUS_UNKNOWN
+fi
+
+## moteur ##
+
+if ((${MY_ARRAY[3]}>$THRESHOLD)) ; then
+	echo "NOK : Attention, le compteur d'erreur MySQL rapporte ${MY_ARRAY[3]} erreurs, merci d'intervenir" ;
+	exit $_NAGIOS_STATUS_CRITICAL
+else
+	echo "OK : le compteur d'erreur est de ${MY_ARRAY[3]} et le seuil max de ${MY_ARRAY[1]}" ;
+	exit $_NAGIOS_STATUS_OK
+fi
+
+# si pas de match on sort en UNKNOWN (surtout pas en OK !!!!)	
+exit $_NAGIOS_STATUS_UNKNOWN
