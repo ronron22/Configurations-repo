@@ -11,7 +11,7 @@ backend default {
     .first_byte_timeout = 300s;
 }
  
-acl ecritelacl {
+acl FOURNISSEURacl {
         "213.218.130.0"/24; /* ip install */
 	"213.182.56.96"/27; /* Nagios */
 	"195.200.109.128"/27; /* nagios */
@@ -24,7 +24,7 @@ acl ecritelacl {
  sub vcl_recv {
 
 	/* Exemple de blocage d'acl */
-	/* if (client.ip !~ ecritelacl) {
+	/* if (client.ip !~ FOURNISSEURacl) {
                 error 403 "Forbidden"; 
         } */
 
@@ -62,7 +62,7 @@ acl ecritelacl {
 	}*/
 
 	/* on restreint l'accès */
-     if ((req.url ~ "munin|phpmyadmin") && client.ip !~ ecritelacl) {
+     if ((req.url ~ "munin|phpmyadmin") && client.ip !~ FOURNISSEURacl) {
             error 403 "Forbidden";
 	}
 

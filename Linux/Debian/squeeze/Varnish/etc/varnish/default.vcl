@@ -1,4 +1,4 @@
-# http://blog.jeremm.fr/?tag=varnish-2 && personnalisation Ecritel Install 
+# http://blog.jeremm.fr/?tag=varnish-2 && personnalisation FOURNISSEUR Install 
 # configuration simple mono-backend
 
 backend default {
@@ -64,8 +64,8 @@ sub vcl_recv {
 		return (pass);
 	}	
 
-	/* specifique check ecritel */
-	if (req.http.X-Ecritel-Check) {
+	/* specifique check FOURNISSEUR */
+	if (req.http.X-FOURNISSEUR-Check) {
 		return(pass);
 	}
   

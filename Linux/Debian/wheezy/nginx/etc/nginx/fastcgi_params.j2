@@ -27,7 +27,7 @@ fastcgi_param   HTTPS                   $https if_not_empty;
 fastcgi_param   REDIRECT_STATUS         200;
 
 ####################
-## Ecritel Tuning ##
+## FOURNISSEUR Tuning ##
 ####################
 fastcgi_connect_timeout {{ fastcgi_connect_timeout|default('600') }};
 fastcgi_send_timeout {{ fastcgi_send_timeout|default('600') }};

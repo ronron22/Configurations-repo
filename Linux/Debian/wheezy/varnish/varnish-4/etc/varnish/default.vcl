@@ -149,7 +149,7 @@ sub vcl_deliver {
 	unset resp.http.Server;
 	unset resp.http.X-Powered-By; */
 
-	/* Ecritel troubleshooting */
+	/* FOURNISSEUR troubleshooting */
 	/* On ajoute le nom backend dans la réponse au client */ 
 	set resp.http.X-varnishID = server.hostname;
 }

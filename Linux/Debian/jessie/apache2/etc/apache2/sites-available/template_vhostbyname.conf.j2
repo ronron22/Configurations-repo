@@ -10,7 +10,7 @@
 {% endfor %}
 {% endif %}
 
-	ServerAdmin webmaster@ecritel.net
+	ServerAdmin webmaster@FOURNISSEUR.net
 	DocumentRoot {{ item.value.documentroot|default('/var/www/'+item.value.servername+'/www')}}
 
 	<Directory {{ item.value.documentroot|default('/var/www/'+item.value.servername)}}/>
