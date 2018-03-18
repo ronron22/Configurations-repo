@@ -1,4 +1,4 @@
-# Dépôts des configuration Ecritel Install et des fichiers nécessaires aux install
+# Dépôts des configurationdes Install et des fichiers nécessaires aux install
 
 Les configurations peuvent se présenter sous forme de fichier texte "classique" ou sous forme de templates Jinja (j2). 
 
